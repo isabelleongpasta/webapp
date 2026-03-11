@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather — Isabelle</title>
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="manifest.json" />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: #f2f2f0;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 28px 16px 56px;
+    }
+
+    /* ── Header ── */
+    .header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+    .header-text {}
+    .greeting { font-size: 13px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 2px; }
+    .location { font-size: 30px; font-weight: 700; letter-spacing: -0.8px; line-height: 1.1; }
+    .date-line { font-size: 15px; color: #888; margin-top: 3px; }
+
+    /* ── Play button ── */
+    .play-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: #1a1a1a;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 4px;
+      transition: transform 0.15s ease, background 0.15s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .play-btn:hover  { background: #333; transform: scale(1.06); }
+    .play-btn:active { transform: scale(0.95); }
+    .play-btn.playing { background: #3b5bdb; }
+
+    /* ── Hero card ── */
+    .hero-card {
+      background: white;
+      border-radius: 22px;
+      padding: 22px 22px 18px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 14px rgba(0,0,0,0.07);
+    }
+    .hero-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .hero-left {}
+    .hero-temp { font-size: 80px; font-weight: 400; line-height: 1; letter-spacing: -3px; }
+    .hero-unit { font-size: 32px; font-weight: 400; }
+    .hero-condition { font-size: 18px; font-weight: 600; margin-top: 6px; }
+    .hero-range { font-size: 14px; color: #999; margin-top: 3px; }
+    .hero-icon { font-size: 60px; line-height: 1; margin-top: 4px; }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #f0f0ee;
+    }
+    .stat { text-align: center; padding: 4px 0; }
+    .stat-value { font-size: 15px; font-weight: 600; }
+    .stat-label { font-size: 11px; color: #bbb; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #bbb;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 22px 0 9px 4px;
+    }
+
+    /* ── Schedule card ── */
+    .schedule-card {
+      background: white;
+      border-radius: 18px;
+      padding: 16px 18px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.05);
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .schedule-card.dimmed { opacity: 0.45; }
+    .sched-icon { font-size: 26px; flex-shrink: 0; margin-top: 3px; }
+    .sched-body { flex: 1; min-width: 0; }
+    .sched-time { font-size: 11px; font-weight: 600; color: #bbb; text-transform: uppercase; letter-spacing: 0.4px; }
+    .sched-activity { font-size: 15px; font-weight: 700; margin: 2px 0 6px; }
+    .sched-temp-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .sched-temp { font-size: 24px; font-weight: 400; letter-spacing: -0.5px; }
+    .sched-condition { font-size: 14px; color: #555; }
+    .sched-meta { font-size: 12px; color: #bbb; margin-top: 4px; }
+
+    /* ── Advisory pills ── */
+    .advisories { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .pill {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 10px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      line-height: 1.3;
+    }
+    .pill-umbrella   { background: #e8f0fe; color: #3b5bdb; }
+    .pill-umbrella2  { background: #dbe4ff; color: #3b5bdb; }
+    .pill-layers     { background: #fff3cd; color: #7d5a00; }
+    .pill-wind       { background: #e9ecef; color: #495057; }
+    .pill-ok         { background: #d3f9d8; color: #2b8a3e; }
+    .pill-uv         { background: #fff0f6; color: #c2255c; }
+
+    /* ── Tomorrow header card ── */
+    .tomorrow-card {
+      background: white;
+      border-radius: 18px;
+      padding: 16px 18px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tmr-label    { font-size: 12px; font-weight: 600; color: #bbb; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tmr-cond     { font-size: 17px; font-weight: 700; margin-top: 3px; }
+    .tmr-range    { font-size: 13px; color: #999; margin-top: 3px; }
+    .tmr-icon     { font-size: 44px; }
+
+    /* ── Loading / error ── */
+    .loading {
+      text-align: center; padding: 80px 20px; color: #ccc;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #eee; border-top-color: #bbb;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-card {
+      background: #fff5f5; border-radius: 18px;
+      padding: 28px; text-align: center; margin-top: 24px;
+    }
+    .error-card p { color: #c92a2a; }
+    .error-card .err-emoji { font-size: 32px; margin-bottom: 8px; }
+    .error-card .err-title { font-weight: 700; font-size: 16px; }
+    .error-card .err-sub { font-size: 13px; margin-top: 6px; opacity: 0.8; }
+
+    /* ── Calendar connect button ── */
+    .cal-connect-btn {
+      display: none; /* shown by JS once GIS is ready */
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1.5px solid #e0e0de;
+      background: white;
+      font-family: 'Lora', Georgia, serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: #888;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .cal-connect-btn:hover  { border-color: #4285f4; color: #4285f4; }
+    .cal-connect-btn.connected { border-color: #2b8a3e; color: #2b8a3e; cursor: default; }
+    .cal-connect-btn.error     { border-color: #c92a2a; color: #c92a2a; }
+
+    /* ── Footer ── */
+    .footer { text-align: center; font-size: 12px; color: #ccc; margin-top: 36px; }
+
+    /* ── Rain chart ── */
+    .rain-chart-card {
+      background: white;
+      border-radius: 18px;
+      padding: 16px 18px 14px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.05);
+    }
+    .rain-chart-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #bbb;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+    }
+    .rain-chart-inner {
+      position: relative;
+    }
+    .rain-guide-lines {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 64px;
+      pointer-events: none;
+    }
+    .rain-guide-line {
+      position: absolute;
+      left: 0; right: 0;
+      border-top: 1px dashed #f0f0ee;
+    }
+    .rain-guide-pct {
+      position: absolute;
+      right: 0;
+      font-size: 9px;
+      color: #ddd;
+      transform: translateY(-9px);
+      line-height: 1;
+    }
+    .rain-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 64px;
+    }
+    .rain-bar-wrap {
+      flex: 1;
+      position: relative;
+      height: 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .rain-bar {
+      width: 100%;
+      border-radius: 3px 3px 0 0;
+    }
+    .rain-pct {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      font-size: 6.5px;
+      font-family: 'Lora', Georgia, serif;
+      color: #aaa;
+      pointer-events: none;
+      line-height: 1;
+    }
+    .rain-labels {
+      display: flex;
+      gap: 2px;
+      margin-top: 5px;
+    }
+    .rain-label-cell {
+      flex: 1;
+      text-align: center;
+      font-size: 9px;
+      color: #ccc;
+      font-weight: 500;
+      overflow: visible;
+      white-space: nowrap;
+    }
+
+    /* ── Divider ── */
+    .day-divider {
+      border: none;
+      border-top: 1px solid #e8e8e6;
+      margin: 28px 4px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="loading">
+    <div class="spinner"></div>
+    <p>Fetching Manchester weather…</p>
+  </div>
+</div>
+
+<script>
+  const LAT = 53.4808;
+  const LON = -2.2426;
+  const CLASS_DAYS = [1, 2, 3, 5]; // Mon, Tue, Wed, Fri (not Thu=4, not Sat=6, Sun=0)
+
+  let gWeatherData = null; // stored after fetch so speakSummary() can access it
+
+  // ── Google Calendar ──────────────────────────────────────────────────────────
+  const GOOGLE_CLIENT_ID = '992386879256-f08k9isg0h6gtlus990v5ertobo83gqc.apps.googleusercontent.com';
+  let gCalToken    = null;
+  let gTokenClient = null;
+
+  // Called once the GIS library is ready (polled on load)
+  function initGoogleAuth() {
+    if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') return;
+    if (typeof google === 'undefined' || !google.accounts) return;
+    gTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.readonly',
+      callback: async (resp) => {
+        const btn = document.getElementById('cal-btn');
+        if (resp.error) {
+          if (btn) { btn.textContent = '⚠ Auth failed'; btn.classList.add('error'); }
+          return;
+        }
+        gCalToken = resp.access_token;
+        if (btn) { btn.textContent = '📅 Calendar connected'; btn.classList.add('connected'); }
+        await loadCalendarEvents();
+      }
+    });
+    const btn = document.getElementById('cal-btn');
+    if (btn) btn.style.display = 'inline-flex';
+  }
+
+  function connectCalendar() {
+    if (!gTokenClient) return;
+    gTokenClient.requestAccessToken({ prompt: 'consent' });
+  }
+
+  async function loadCalendarEvents() {
+    if (!gCalToken || !gWeatherData) return;
+    const todayStr    = gWeatherData.daily.time[0];
+    const tomorrowStr = gWeatherData.daily.time[1];
+    const timeMin = new Date(todayStr    + 'T00:00:00').toISOString();
+    const timeMax = new Date(tomorrowStr + 'T23:59:59').toISOString();
+
+    // Show loading state
+    ['cal-today','cal-tomorrow'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<div style="font-size:12px;color:#ccc;padding:4px 2px;">Loading calendar…</div>';
+    });
+
+    try {
+      // 1. Get calendar list → find OneMed Timetable
+      const listResp = await fetch(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+        { headers: { Authorization: `Bearer ${gCalToken}` } }
+      );
+      if (!listResp.ok) throw new Error('calendarList ' + listResp.status);
+      const listData  = await listResp.json();
+      const cals      = listData.items || [];
+      const oneMedCal = cals.find(c => c.summary && c.summary.toLowerCase().includes('onemed'));
+      const chosenCal = oneMedCal || cals.find(c => c.primary);
+      if (!chosenCal) throw new Error('No suitable calendar found');
+
+      const calIdEnc  = encodeURIComponent(chosenCal.id);
+      const calName   = chosenCal.summary;
+
+      // 2. Fetch events
+      const evResp = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${calIdEnc}/events` +
+        `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
+        `&singleEvents=true&orderBy=startTime&maxResults=30`,
+        { headers: { Authorization: `Bearer ${gCalToken}` } }
+      );
+      if (!evResp.ok) throw new Error('events ' + evResp.status);
+      const evData = await evResp.json();
+      const events = (evData.items || []).filter(e => e.status !== 'cancelled');
+
+      const todayEvents    = events.filter(e => (e.start.dateTime || e.start.date).startsWith(todayStr));
+      const tomorrowEvents = events.filter(e => (e.start.dateTime || e.start.date).startsWith(tomorrowStr));
+
+      // 3. Inject into page
+      injectCalSection('cal-today',    todayEvents,    0, calName);
+      injectCalSection('cal-tomorrow', tomorrowEvents, 1, calName);
+
+    } catch (err) {
+      console.error('Calendar error:', err);
+      ['cal-today','cal-tomorrow'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div style="font-size:12px;color:#ccc;padding:4px 2px;">Couldn\'t load calendar events</div>';
+      });
+    }
+  }
+
+  function injectCalSection(elId, events, dayOffset, calName) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!events.length) { el.innerHTML = ''; return; }
+    el.innerHTML =
+      `<div class="section-label" style="color:#4285f4;margin-top:22px;">📅 ${calName}</div>` +
+      events.map(e => renderCalCard(e, dayOffset)).join('');
+  }
+
+  function renderCalCard(event, dayOffset) {
+    const h     = gWeatherData.hourly;
+    const title = event.summary || 'Untitled event';
+    let timeLabel = 'All day';
+    let weatherHour = 9;
+
+    if (event.start.dateTime) {
+      const start = new Date(event.start.dateTime);
+      const end   = new Date(event.end.dateTime);
+      timeLabel   = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) +
+                    ' – ' +
+                    end.toLocaleTimeString('en-GB',   { hour: '2-digit', minute: '2-digit' });
+      weatherHour = start.getHours();
+    }
+
+    const idx   = dayOffset * 24 + Math.min(Math.max(weatherHour, 0), 23);
+    const temp  = Math.round(h.temperature_2m[idx]);
+    const feels = Math.round(h.apparent_temperature[idx]);
+    const prec  = h.precipitation_probability[idx] ?? 0;
+    const wind  = Math.round(h.windspeed_10m[idx]);
+    const uv    = h.uv_index[idx] ?? 0;
+    const humid = h.relative_humidity_2m[idx];
+    const { icon, label } = wmoInfo(h.weathercode[idx]);
+    const loc   = event.location ? ` · 📍 ${event.location.split(',')[0]}` : '';
+
+    return `
+      <div class="schedule-card" style="border-left:3px solid #4285f4;">
+        <div class="sched-icon">📅</div>
+        <div class="sched-body">
+          <div class="sched-time">${timeLabel}${loc}</div>
+          <div class="sched-activity">${title}</div>
+          <div class="sched-temp-row">
+            <span class="sched-temp">${temp}°C</span>
+            <span class="sched-condition">${icon} ${label} · feels ${feels}°</span>
+          </div>
+          <div class="sched-meta">💧 ${humid}% humidity &nbsp;·&nbsp; 💨 ${windDesc(wind)} &nbsp;·&nbsp; 🌧️ ${prec}% rain chance</div>
+          ${pills(prec, temp, wind, uv)}
+        </div>
+      </div>`;
+  }
+
+  // Poll for GIS library readiness (it loads async)
+  window.addEventListener('load', () => {
+    let attempts = 0;
+    const check = setInterval(() => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        clearInterval(check);
+        initGoogleAuth();
+      }
+      if (++attempts > 50) clearInterval(check); // give up after 5s
+    }, 100);
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  function greeting() {
+    const h = new Date().getHours();
+    if (h < 5)  return 'Up early, Isabelle';
+    if (h < 12) return 'Good morning, Isabelle';
+    if (h < 17) return 'Good afternoon, Isabelle';
+    return 'Good evening, Isabelle';
+  }
+
+  function formatDate(dateStr) {
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long'
+    });
+  }
+
+  function dayName(dateStr) {
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long' });
+  }
+
+  function dayOfWeek(dateStr) {
+    return new Date(dateStr + 'T12:00:00').getDay();
+  }
+
+  function wmoInfo(code) {
+    if (code === 0)              return { icon: '☀️',  label: 'Clear sky' };
+    if (code <= 2)               return { icon: '🌤️',  label: 'Partly cloudy' };
+    if (code === 3)              return { icon: '☁️',  label: 'Overcast' };
+    if (code <= 48)              return { icon: '🌫️',  label: 'Foggy' };
+    if (code <= 55)              return { icon: '🌦️',  label: 'Drizzle' };
+    if (code <= 65)              return { icon: '🌧️',  label: 'Rain' };
+    if (code <= 77)              return { icon: '❄️',  label: 'Snow' };
+    if (code <= 82)              return { icon: '🌦️',  label: 'Showers' };
+    if (code <= 86)              return { icon: '🌨️',  label: 'Snow showers' };
+    return                              { icon: '⛈️',  label: 'Thunderstorm' };
+  }
+
+  function windDesc(kmh) {
+    if (kmh <= 5)  return 'Calm';
+    if (kmh <= 15) return 'Light breeze';
+    if (kmh <= 25) return 'Gentle breeze';
+    if (kmh <= 35) return 'Breezy';
+    if (kmh <= 45) return 'Quite windy';
+    if (kmh <= 60) return 'Windy';
+    if (kmh <= 75) return 'Very windy';
+    return 'Stormy';
+  }
+
+  function layerAdvice(temp) {
+    if (temp < 0)  return 'Full winter: thermals, heavy coat, scarf & gloves';
+    if (temp < 4)  return 'Heavy coat + warm jumper, scarf & gloves';
+    if (temp < 8)  return 'Winter coat over a jumper';
+    if (temp < 12) return 'Jacket + light jumper';
+    if (temp < 16) return 'Light jacket — maybe a jumper underneath';
+    if (temp < 19) return 'Light jacket or a jumper on its own';
+    if (temp < 23) return 'T-shirt or light top';
+    return 'T-shirt — it\'s warm!';
+  }
+
+  function umbrellaAdvice(prob) {
+    if (prob >= 70) return { text: 'Definitely take an umbrella', cls: 'pill-umbrella' };
+    if (prob >= 45) return { text: 'Umbrella recommended', cls: 'pill-umbrella' };
+    if (prob >= 25) return { text: 'Umbrella just in case', cls: 'pill-umbrella2' };
+    return null;
+  }
+
+  function pills(precipProb, temp, wind, uv) {
+    const parts = [];
+
+    const u = umbrellaAdvice(precipProb);
+    if (u) {
+      parts.push(`<span class="pill ${u.cls}">☂️ ${u.text}</span>`);
+    } else {
+      parts.push(`<span class="pill pill-ok">✓ No umbrella needed</span>`);
+    }
+
+    parts.push(`<span class="pill pill-layers">🧥 ${layerAdvice(temp)}</span>`);
+
+    if (wind >= 50) parts.push(`<span class="pill pill-wind">💨 Very windy — hold on!</span>`);
+    else if (wind >= 35) parts.push(`<span class="pill pill-wind">💨 Quite windy</span>`);
+
+    if (uv >= 6)      parts.push(`<span class="pill pill-uv">🌞 High UV — SPF today</span>`);
+    else if (uv >= 3) parts.push(`<span class="pill pill-uv">🌞 Moderate UV</span>`);
+
+    return `<div class="advisories">${parts.join('')}</div>`;
+  }
+
+  function renderTempChart(h, dayOffset) {
+    const START = 5, END = 22;
+    const data = [];
+    for (let hr = START; hr <= END; hr++) {
+      data.push(h.temperature_2m[dayOffset * 24 + hr]);
+    }
+    const n = data.length;
+    const minT = Math.min(...data);
+    const maxT = Math.max(...data);
+    const range = Math.max(maxT - minT, 2);
+
+    // SVG coordinate helpers
+    const VW = 300, VH = 88;
+    const PL = 6, PR = 6, PT = 20, PB = 18;
+    const cW = VW - PL - PR, cH = VH - PT - PB;
+    const px = i  => PL + (i / (n - 1)) * cW;
+    const py = t  => PT + cH - ((t - minT) / range) * cH;
+
+    // Cardinal spline → cubic bezier
+    function buildPath(pts, tension = 0.35) {
+      let d = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[Math.max(0, i - 1)];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[Math.min(pts.length - 1, i + 2)];
+        const cp1x = p1[0] + (p2[0] - p0[0]) * tension;
+        const cp1y = p1[1] + (p2[1] - p0[1]) * tension;
+        const cp2x = p2[0] - (p3[0] - p1[0]) * tension;
+        const cp2y = p2[1] - (p3[1] - p1[1]) * tension;
+        d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+      }
+      return d;
+    }
+
+    const pts     = data.map((t, i) => [px(i), py(t)]);
+    const linePath = buildPath(pts);
+    const areaPath = linePath + ` L ${pts[n-1][0]},${PT+cH} L ${pts[0][0]},${PT+cH} Z`;
+
+    // Temp + hour labels every 3 hrs: indices 0,3,6,9,12,15,17 → 5am,8am,11am,2pm,5pm,8pm,10pm
+    const labelIdxs = [0, 3, 6, 9, 12, 15, 17].filter(i => i < n);
+    const tempLabels = labelIdxs.map(i => {
+      const lx = px(i).toFixed(1);
+      const ly = (py(data[i]) - 6).toFixed(1);
+      return `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7.5" fill="#aaa" font-weight="600" font-family="system-ui,sans-serif">${Math.round(data[i])}°</text>`;
+    }).join('');
+
+    const hourLabels = labelIdxs.map(i => {
+      const hr  = START + i;
+      const lbl = hr === 12 ? '12pm' : hr < 12 ? `${hr}am` : `${hr - 12}pm`;
+      return `<text x="${px(i).toFixed(1)}" y="${VH - 2}" text-anchor="middle" font-size="7.5" fill="#ccc" font-family="system-ui,sans-serif">${lbl}</text>`;
+    }).join('');
+
+    // "Now" marker (today only)
+    let nowMarker = '';
+    if (dayOffset === 0) {
+      const nowHr = new Date().getHours();
+      if (nowHr >= START && nowHr <= END) {
+        const ni = nowHr - START;
+        const nx = px(ni).toFixed(1);
+        const ny = py(data[ni]).toFixed(1);
+        nowMarker = `
+          <line x1="${nx}" y1="${PT}" x2="${nx}" y2="${PT + cH}" stroke="#fd7e14" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+          <circle cx="${nx}" cy="${ny}" r="3.5" fill="#fd7e14" stroke="white" stroke-width="1.5"/>`;
+      }
+    }
+
+    const gradId = `tg${dayOffset}`;
+    return `
+      <div class="rain-chart-card" style="margin-bottom:8px;">
+        <div class="rain-chart-title">🌡️ Temperature — hour by hour</div>
+        <svg viewBox="0 0 ${VW} ${VH}" width="100%" style="display:block;overflow:visible;">
+          <defs>
+            <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#fd7e14" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#fd7e14" stop-opacity="0.01"/>
+            </linearGradient>
+          </defs>
+          <path d="${areaPath}" fill="url(#${gradId})"/>
+          <path d="${linePath}" fill="none" stroke="#fd7e14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          ${tempLabels}
+          ${hourLabels}
+          ${nowMarker}
+        </svg>
+      </div>`;
+  }
+
+  function renderRainChart(h, dayOffset) {
+    // Show hours 5am – 10pm (17 bars)
+    const CHART_H = 64; // px
+    const startHr = 5, endHr = 22;
+    const hourData = [];
+    for (let hr = startHr; hr <= endHr; hr++) {
+      const idx = dayOffset * 24 + hr;
+      hourData.push({ hr, prob: h.precipitation_probability[idx] ?? 0 });
+    }
+
+    // Bar colours by severity
+    function barColor(p) {
+      if (p >= 70) return '#3b5bdb';
+      if (p >= 45) return '#74c0fc';
+      if (p >= 20) return '#a5d8ff';
+      return '#dbe4ff';
+    }
+
+    const bars = hourData.map(({ prob }) => {
+      const barPx = Math.max(2, Math.round(prob * CHART_H / 100));
+      const pctLabel = prob > 0
+        ? `<div class="rain-pct" style="bottom:${barPx + 2}px;">${prob}%</div>`
+        : '';
+      return `<div class="rain-bar-wrap">${pctLabel}<div class="rain-bar" style="height:${barPx}px;background:${barColor(prob)};"></div></div>`;
+    }).join('');
+
+    // Labels: show every 3 hours — 5am, 8am, 11am, 2pm, 5pm, 8pm
+    const labels = hourData.map(({ hr }) => {
+      const show = hr % 3 === 2 || hr === 5 || hr === 22;
+      let txt = '';
+      if (show) {
+        txt = hr === 12 ? '12pm' : hr < 12 ? `${hr}am` : `${hr - 12}pm`;
+      }
+      return `<div class="rain-label-cell">${txt}</div>`;
+    }).join('');
+
+    // Guide lines at 50% and 100%
+    const guide50  = Math.round(CHART_H * 0.5);
+    const guide100 = 0;
+
+    return `
+      <div class="rain-chart-card">
+        <div class="rain-chart-title">🌧️ Rain chance — hour by hour</div>
+        <div class="rain-chart-inner">
+          <div class="rain-guide-lines">
+            <div class="rain-guide-line" style="top:${guide100}px;"><span class="rain-guide-pct">100%</span></div>
+            <div class="rain-guide-line" style="top:${guide50}px;"><span class="rain-guide-pct">50%</span></div>
+          </div>
+          <div class="rain-bars">${bars}</div>
+        </div>
+        <div class="rain-labels">${labels}</div>
+      </div>`;
+  }
+
+  function speakSummary() {
+    const btn = document.getElementById('play-btn');
+
+    // Toggle off if already speaking
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      btn.innerHTML = '▶'; btn.classList.remove('playing');
+      return;
+    }
+
+    if (!gWeatherData) return;
+    const { hourly: h, daily } = gWeatherData;
+    const curHour = new Date().getHours();
+    const dateStr  = daily.time[0];
+    const dow      = dayOfWeek(dateStr);
+    const hasClass = CLASS_DAYS.includes(dow);
+
+    // Key temps
+    const curTemp   = Math.round(h.temperature_2m[curHour]);
+    const curFeels  = Math.round(h.apparent_temperature[curHour]);
+    const hi        = Math.round(daily.temperature_2m_max[0]);
+    const lo        = Math.round(daily.temperature_2m_min[0]);
+    const { label: curLabel } = wmoInfo(h.weathercode[curHour]);
+
+    // Schedule snapshots
+    const gymTemp   = Math.round(h.temperature_2m[6]);
+    const gymFeels  = Math.round(h.apparent_temperature[6]);
+    const gymPrec   = h.precipitation_probability[6]  ?? 0;
+    const classTemp = Math.round(h.temperature_2m[9]);
+    const classPrec = h.precipitation_probability[9]  ?? 0;
+    const cityTemp  = Math.round(h.temperature_2m[14]);
+    const cityPrec  = h.precipitation_probability[14] ?? 0;
+    const homePrec  = h.precipitation_probability[18] ?? 0;
+
+    // Peak rain window
+    let maxPrec = 0, maxPrecHour = -1;
+    for (let hr = 6; hr <= 22; hr++) {
+      const p = h.precipitation_probability[hr] ?? 0;
+      if (p > maxPrec) { maxPrec = p; maxPrecHour = hr; }
+    }
+    function hrLabel(hr) {
+      if (hr < 12) return `${hr} AM`;
+      if (hr === 12) return '12 PM';
+      return `${hr - 12} PM`;
+    }
+
+    // Build the spoken summary
+    let txt = `Right now in Manchester it's ${curTemp} degrees, feeling like ${curFeels}. `;
+    txt += `${curLabel} today. High of ${hi}, low of ${lo}. `;
+
+    // Rain overview
+    if (maxPrec >= 70) {
+      txt += `Definitely bring an umbrella — rain is most likely around ${hrLabel(maxPrecHour)}, with a ${maxPrec}% chance. `;
+    } else if (maxPrec >= 40) {
+      txt += `There's a good chance of rain around ${hrLabel(maxPrecHour)}, ${maxPrec}%. Bring an umbrella. `;
+    } else if (maxPrec >= 20) {
+      txt += `Rain is possible today, up to ${maxPrec}%. Maybe pack an umbrella just in case. `;
+    } else {
+      txt += `Looks dry today — no umbrella needed. `;
+    }
+
+    // Dressing advice based on today's high
+    txt += `For dressing today: ${layerAdvice(hi)}. `;
+
+    // Gym commute
+    txt += `Gym commute at 6 AM — ${gymTemp} degrees, feels like ${gymFeels}. `;
+    if (gymPrec >= 40) txt += `Take an umbrella. `;
+
+    // Class
+    if (hasClass) {
+      txt += `Morning lectures — ${classTemp} degrees. `;
+      if (classPrec >= 40) txt += `Umbrella for lectures too. `;
+    }
+
+    // City centre
+    txt += `Afternoon in the city centre — ${cityTemp} degrees. `;
+    if (cityPrec >= 40) txt += `Umbrella for the afternoon walk. `;
+    else txt += `Should be fine without an umbrella in the afternoon. `;
+
+    // Walk home
+    if (homePrec >= 40) txt += `And keep that umbrella for your walk home. `;
+    else txt += `Walk home should be dry. `;
+
+    txt += `Have a good day!`;
+
+    // Speak it
+    const utterance = new SpeechSynthesisUtterance(txt);
+    utterance.lang  = 'en-GB';
+    utterance.rate  = 0.97;
+    utterance.pitch = 1.0;
+
+    btn.innerHTML = '⏹'; btn.classList.add('playing');
+    utterance.onend   = () => { btn.innerHTML = '▶'; btn.classList.remove('playing'); };
+    utterance.onerror = () => { btn.innerHTML = '▶'; btn.classList.remove('playing'); };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function schedBlock(activity, timeLabel, emoji, hour, h, dayOffset) {
+    const idx = dayOffset * 24 + hour;
+    const temp   = Math.round(h.temperature_2m[idx]);
+    const feels  = Math.round(h.apparent_temperature[idx]);
+    const prec   = h.precipitation_probability[idx] ?? 0;
+    const wind   = Math.round(h.windspeed_10m[idx]);
+    const humid  = h.relative_humidity_2m[idx];
+    const uv     = h.uv_index[idx] ?? 0;
+    const { icon, label } = wmoInfo(h.weathercode[idx]);
+
+    return `
+      <div class="schedule-card">
+        <div class="sched-icon">${emoji}</div>
+        <div class="sched-body">
+          <div class="sched-time">${timeLabel}</div>
+          <div class="sched-activity">${activity}</div>
+          <div class="sched-temp-row">
+            <span class="sched-temp">${temp}°C</span>
+            <span class="sched-condition">${icon} ${label} · feels ${feels}°</span>
+          </div>
+          <div class="sched-meta">💧 ${humid}% humidity &nbsp;·&nbsp; 💨 ${windDesc(wind)} &nbsp;·&nbsp; 🌧️ ${prec}% rain chance</div>
+          ${pills(prec, temp, wind, uv)}
+        </div>
+      </div>`;
+  }
+
+  function renderDay(daily, h, offset) {
+    const date = daily.time[offset];
+    const dow  = dayOfWeek(date);
+    const hasClass = CLASS_DAYS.includes(dow);
+    const { icon: dayIcon, label: dayLabel } = wmoInfo(daily.weathercode[offset]);
+    const hi   = Math.round(daily.temperature_2m_max[offset]);
+    const lo   = Math.round(daily.temperature_2m_min[offset]);
+    const maxW = Math.round(daily.windspeed_10m_max[offset]);
+    const uvM  = Math.round(daily.uv_index_max[offset] ?? 0);
+
+    let out = '';
+
+    if (offset === 0) {
+      // Today: live hero card
+      const now = new Date().getHours();
+      const curTemp  = Math.round(h.temperature_2m[now]);
+      const curCode  = h.weathercode[now];
+      const curHumid = h.relative_humidity_2m[now];
+      const curWind  = Math.round(h.windspeed_10m[now]);
+      const { icon: ci, label: cl } = wmoInfo(curCode);
+
+      out += `
+        <div class="hero-card">
+          <div class="hero-top">
+            <div class="hero-left">
+              <div class="hero-temp">${curTemp}<span class="hero-unit">°</span></div>
+              <div class="hero-condition">${cl}</div>
+              <div class="hero-range">↑ ${hi}° &nbsp; ↓ ${lo}° &nbsp; today</div>
+            </div>
+            <div class="hero-icon">${ci}</div>
+          </div>
+          <div class="hero-stats">
+            <div class="stat">
+              <div class="stat-value">💧 ${curHumid}%</div>
+              <div class="stat-label">Humidity</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">💨 ${windDesc(curWind)}</div>
+              <div class="stat-label">Wind</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">☀️ UV ${uvM}</div>
+              <div class="stat-label">Index</div>
+            </div>
+          </div>
+        </div>
+        <div class="section-label">Your day ahead</div>`;
+
+      out += renderTempChart(h, 0);
+      out += renderRainChart(h, 0);
+      out += `<div id="cal-today"></div>`;
+
+    } else {
+      // Tomorrow summary
+      out += `
+        <hr class="day-divider" />
+        <div class="section-label">Tomorrow</div>
+        <div class="tomorrow-card">
+          <div>
+            <div class="tmr-label">${formatDate(date)}</div>
+            <div class="tmr-cond">${dayLabel}</div>
+            <div class="tmr-range">↑ ${hi}° &nbsp; ↓ ${lo}° &nbsp; · &nbsp; 💨 ${windDesc(maxW)}</div>
+          </div>
+          <div class="tmr-icon">${dayIcon}</div>
+        </div>`;
+
+      out += renderTempChart(h, 1);
+      out += renderRainChart(h, 1);
+      out += `<div id="cal-tomorrow"></div>`;
+      out += `<div class="section-label">Your day ahead</div>`;
+    }
+
+    // Gym commute — every day
+    out += schedBlock('Gym commute', '6:00 – 7:00 AM', '🏋️', 6, h, offset);
+
+    // Class — Mon / Tue / Wed / Fri only
+    if (hasClass) {
+      out += schedBlock('Lectures & class', '9:00 AM – 1:00 PM', '📚', 9, h, offset);
+    } else {
+      out += `
+        <div class="schedule-card dimmed">
+          <div class="sched-icon">📚</div>
+          <div class="sched-body">
+            <div class="sched-time">Morning</div>
+            <div class="sched-activity">No class — ${dayName(date)}</div>
+          </div>
+        </div>`;
+    }
+
+    // City centre walk — every day
+    out += schedBlock('Walk into city centre', '1:00 – 5:30 PM', '🌆', 14, h, offset);
+
+    // Walk home
+    out += schedBlock('Walk home from city', '6:00 – 6:30 PM', '🏠', 18, h, offset);
+
+    return out;
+  }
+
+  async function init() {
+    const app = document.getElementById('app');
+    try {
+      const url =
+        `https://api.open-meteo.com/v1/forecast` +
+        `?latitude=${LAT}&longitude=${LON}` +
+        `&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,` +
+        `precipitation_probability,weathercode,windspeed_10m,uv_index` +
+        `&daily=weathercode,temperature_2m_max,temperature_2m_min,` +
+        `precipitation_sum,windspeed_10m_max,uv_index_max` +
+        `&timezone=Europe%2FLondon&forecast_days=2`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+
+      gWeatherData = data; // store globally for speakSummary()
+      const { hourly: h, daily } = data;
+      const now = new Date();
+
+      let html = `
+        <div class="header">
+          <div class="header-text">
+            <div class="greeting">${greeting()}</div>
+            <div class="location">Manchester</div>
+            <div class="date-line">${formatDate(daily.time[0])}</div>
+          </div>
+          <button class="play-btn" id="play-btn" onclick="speakSummary()" title="Listen to today's summary" aria-label="Listen to weather summary">▶</button>
+        </div>
+        <button class="cal-connect-btn" id="cal-btn" onclick="connectCalendar()">📅 Connect calendar</button>
+      `;
+
+      html += renderDay(daily, h, 0);
+      html += renderDay(daily, h, 1);
+
+      html += `<div class="footer">Updated ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · Open-Meteo</div>`;
+
+      app.innerHTML = html;
+
+    } catch (err) {
+      const now = new Date();
+      app.innerHTML = `
+        <div class="header">
+          <div class="greeting">${greeting()}</div>
+          <div class="location">Manchester</div>
+        </div>
+        <div class="error-card">
+          <div class="err-emoji">⚠️</div>
+          <p class="err-title">Couldn't load weather</p>
+          <p class="err-sub">Check your connection and refresh the page</p>
+        </div>`;
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "Weather — Isabelle",
+  "short_name": "Weather",
+  "description": "Daily Manchester weather personalised to Isabelle's schedule",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f2f2f0",
+  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
