@@ -296,34 +296,72 @@
 
   // ── Google Calendar ──────────────────────────────────────────────────────────
   const GOOGLE_CLIENT_ID = '992386879256-f08k9isg0h6gtlus990v5ertobo83gqc.apps.googleusercontent.com';
+  // Calendars to show (case-insensitive name matching)
+  const TARGET_CAL_NAMES = ['onemed', 'socials', 'adulting', 'fitness', 'manchester', 'travel', 'health', 'finance'];
+  const TOKEN_KEY = 'mw_gcal_token';
   let gCalToken    = null;
   let gTokenClient = null;
+
+  function saveToken(token, expiresIn) {
+    const expiry = Date.now() + ((expiresIn || 3600) - 120) * 1000; // 2-min buffer
+    try { localStorage.setItem(TOKEN_KEY, JSON.stringify({ token, expiry })); } catch(e) {}
+  }
+  function loadStoredToken() {
+    try {
+      const s = JSON.parse(localStorage.getItem(TOKEN_KEY));
+      if (s && s.expiry > Date.now()) return s.token;
+    } catch(e) {}
+    return null;
+  }
+  function clearStoredToken() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch(e) {}
+  }
+
+  function setCalBtn(state) {
+    const btn = document.getElementById('cal-btn');
+    if (!btn) return;
+    btn.style.display = 'inline-flex';
+    if (state === 'connected') { btn.textContent = '📅 Calendar connected'; btn.classList.add('connected'); btn.classList.remove('error'); }
+    else if (state === 'error') { btn.textContent = '⚠ Auth failed'; btn.classList.add('error'); btn.classList.remove('connected'); }
+    else { btn.textContent = '📅 Connect calendar'; btn.classList.remove('connected','error'); }
+  }
 
   // Called once the GIS library is ready (polled on load)
   function initGoogleAuth() {
     if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') return;
     if (typeof google === 'undefined' || !google.accounts) return;
+
+    // Try stored token first — auto-connect without prompting
+    const stored = loadStoredToken();
+    if (stored) {
+      gCalToken = stored;
+      setCalBtn('connected');
+      loadCalendarEvents();
+    }
+
     gTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: 'https://www.googleapis.com/auth/calendar.readonly',
       callback: async (resp) => {
-        const btn = document.getElementById('cal-btn');
         if (resp.error) {
-          if (btn) { btn.textContent = '⚠ Auth failed'; btn.classList.add('error'); }
+          clearStoredToken();
+          setCalBtn('error');
           return;
         }
         gCalToken = resp.access_token;
-        if (btn) { btn.textContent = '📅 Calendar connected'; btn.classList.add('connected'); }
+        saveToken(resp.access_token, resp.expires_in);
+        setCalBtn('connected');
         await loadCalendarEvents();
       }
     });
-    const btn = document.getElementById('cal-btn');
-    if (btn) btn.style.display = 'inline-flex';
+
+    if (!stored) setCalBtn('connect');
   }
 
   function connectCalendar() {
     if (!gTokenClient) return;
-    gTokenClient.requestAccessToken({ prompt: 'consent' });
+    // Use empty prompt so browser reuses existing Google session silently
+    gTokenClient.requestAccessToken({ prompt: '' });
   }
 
   async function loadCalendarEvents() {
@@ -333,67 +371,86 @@
     const timeMin = new Date(todayStr    + 'T00:00:00').toISOString();
     const timeMax = new Date(tomorrowStr + 'T23:59:59').toISOString();
 
-    // Show loading state
     ['cal-today','cal-tomorrow'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.innerHTML = '<div style="font-size:12px;color:#ccc;padding:4px 2px;">Loading calendar…</div>';
+      if (el) el.innerHTML = '<div style="font-size:12px;color:#aaa;padding:4px 2px;">Loading calendar…</div>';
     });
 
     try {
-      // 1. Get calendar list → find OneMed Timetable
+      // 1. Get full calendar list
       const listResp = await fetch(
         'https://www.googleapis.com/calendar/v3/users/me/calendarList',
         { headers: { Authorization: `Bearer ${gCalToken}` } }
       );
-      if (!listResp.ok) throw new Error('calendarList ' + listResp.status);
-      const listData  = await listResp.json();
-      const cals      = listData.items || [];
-      const oneMedCal = cals.find(c => c.summary && c.summary.toLowerCase().includes('onemed'));
-      const chosenCal = oneMedCal || cals.find(c => c.primary);
-      if (!chosenCal) throw new Error('No suitable calendar found');
+      if (!listResp.ok) {
+        if (listResp.status === 401) { clearStoredToken(); setCalBtn('connect'); }
+        throw new Error('calendarList ' + listResp.status);
+      }
+      const listData = await listResp.json();
+      const allCals  = listData.items || [];
 
-      const calIdEnc  = encodeURIComponent(chosenCal.id);
-      const calName   = chosenCal.summary;
+      // 2. Filter to target calendars by name
+      const chosenCals = allCals.filter(c => {
+        const name = (c.summary || '').toLowerCase();
+        return TARGET_CAL_NAMES.some(t => name.includes(t));
+      });
+      if (!chosenCals.length) throw new Error('No matching calendars found');
 
-      // 2. Fetch events
-      const evResp = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${calIdEnc}/events` +
-        `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
-        `&singleEvents=true&orderBy=startTime&maxResults=30`,
-        { headers: { Authorization: `Bearer ${gCalToken}` } }
-      );
-      if (!evResp.ok) throw new Error('events ' + evResp.status);
-      const evData = await evResp.json();
-      const events = (evData.items || []).filter(e => e.status !== 'cancelled');
+      // 3. Fetch events from all calendars in parallel
+      const fetchCal = async (cal) => {
+        const idEnc = encodeURIComponent(cal.id);
+        const r = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${idEnc}/events` +
+          `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
+          `&singleEvents=true&orderBy=startTime&maxResults=50`,
+          { headers: { Authorization: `Bearer ${gCalToken}` } }
+        );
+        if (!r.ok) return [];
+        const data = await r.json();
+        return (data.items || [])
+          .filter(e => e.status !== 'cancelled')
+          .map(e => ({ ...e, _calName: cal.summary, _calColor: cal.backgroundColor || '#4285f4' }));
+      };
 
-      const todayEvents    = events.filter(e => (e.start.dateTime || e.start.date).startsWith(todayStr));
-      const tomorrowEvents = events.filter(e => (e.start.dateTime || e.start.date).startsWith(tomorrowStr));
+      const allEvents = (await Promise.all(chosenCals.map(fetchCal))).flat();
 
-      // 3. Inject into page
-      injectCalSection('cal-today',    todayEvents,    0, calName);
-      injectCalSection('cal-tomorrow', tomorrowEvents, 1, calName);
+      // 4. Sort all events by start time
+      allEvents.sort((a, b) => {
+        const aT = a.start.dateTime || a.start.date;
+        const bT = b.start.dateTime || b.start.date;
+        return aT < bT ? -1 : aT > bT ? 1 : 0;
+      });
+
+      const todayEvents    = allEvents.filter(e => (e.start.dateTime || e.start.date).startsWith(todayStr));
+      const tomorrowEvents = allEvents.filter(e => (e.start.dateTime || e.start.date).startsWith(tomorrowStr));
+
+      injectCalSection('cal-today',    todayEvents,    0);
+      injectCalSection('cal-tomorrow', tomorrowEvents, 1);
 
     } catch (err) {
       console.error('Calendar error:', err);
       ['cal-today','cal-tomorrow'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.innerHTML = '<div style="font-size:12px;color:#ccc;padding:4px 2px;">Couldn\'t load calendar events</div>';
+        if (el) el.innerHTML = '<div style="font-size:12px;color:#aaa;padding:4px 2px;">Couldn\'t load calendar events</div>';
       });
     }
   }
 
-  function injectCalSection(elId, events, dayOffset, calName) {
+  function injectCalSection(elId, events, dayOffset) {
     const el = document.getElementById(elId);
     if (!el) return;
     if (!events.length) { el.innerHTML = ''; return; }
+    const label = dayOffset === 0 ? "Today's events" : "Tomorrow's events";
     el.innerHTML =
-      `<div class="section-label" style="color:#4285f4;margin-top:22px;">📅 ${calName}</div>` +
+      `<div class="section-label" style="color:#4285f4;margin-top:22px;">📅 ${label}</div>` +
       events.map(e => renderCalCard(e, dayOffset)).join('');
   }
 
   function renderCalCard(event, dayOffset) {
-    const h     = gWeatherData.hourly;
-    const title = event.summary || 'Untitled event';
+    const h        = gWeatherData.hourly;
+    const color    = event._calColor || '#4285f4';
+    const calLabel = event._calName ? `<span style="font-size:10px;opacity:0.55;margin-left:5px;">${event._calName}</span>` : '';
+    const title    = event.summary || 'Untitled event';
     let timeLabel = 'All day';
     let weatherHour = 9;
 
@@ -417,10 +474,10 @@
     const loc   = event.location ? ` · 📍 ${event.location.split(',')[0]}` : '';
 
     return `
-      <div class="schedule-card" style="border-left:3px solid #4285f4;">
+      <div class="schedule-card" style="border-left:3px solid ${color};">
         <div class="sched-icon">📅</div>
         <div class="sched-body">
-          <div class="sched-time">${timeLabel}${loc}</div>
+          <div class="sched-time">${timeLabel}${loc}${calLabel}</div>
           <div class="sched-activity">${title}</div>
           <div class="sched-temp-row">
             <span class="sched-temp">${temp}°C</span>
